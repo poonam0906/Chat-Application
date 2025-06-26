@@ -1,4 +1,4 @@
-# Chat-Application
+# DialogHub
 
 This project implements a basic chat application using Spring Boot for the backend (WebSocket with STOMP) and a simple HTML/JavaScript frontend.
 
