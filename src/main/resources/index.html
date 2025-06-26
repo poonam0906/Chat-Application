@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple WebSocket Chat</title>
+    <!-- Tailwind CSS CDN for quick styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: "Inter", sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .chat-container {
+            width: 100%;
+            max-width: 500px;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 600px; /* Minimum height for better appearance */
+        }
+        .chat-header {
+            background-image: linear-gradient(to right, #6366f1, #8b5cf6); /* Indigo to Violet */
+            color: white;
+            padding: 20px;
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            border-top-left-radius: 12px;
+            border-top-right-radius: 12px;
+        }
+        .messages {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background-color: #f9fafb;
+        }
+        .message-box {
+            display: flex;
+            flex-direction: column;
+            padding: 8px 12px;
+            border-radius: 8px;
+            max-width: 80%;
+            word-wrap: break-word;
+            line-height: 1.4;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .message-box.self {
+            align-self: flex-end;
+            background-color: #d1e7dd; /* Light green for self messages */
+            color: #1a5e20; /* Dark green text */
+        }
+        .message-box.other {
+            align-self: flex-start;
+            background-color: #e0f2f7; /* Light blue for other messages */
+            color: #2a659a; /* Dark blue text */
+        }
+        .message-box.system {
+            align-self: center;
+            background-color: #fff3cd; /* Light yellow for system messages */
+            color: #664d03; /* Dark yellow text */
+            text-align: center;
+            font-style: italic;
+            font-size: 0.9em;
+            max-width: 90%;
+        }
+        .message-sender {
+            font-weight: bold;
+            font-size: 0.85em;
+            margin-bottom: 4px;
+        }
+        .message-content {
+            font-size: 1em;
+            white-space: pre-wrap; /* Preserve whitespace and break lines */
+        }
+        .message-timestamp {
+            font-size: 0.75em;
+            color: #6b7280;
+            margin-top: 4px;
+            text-align: right;
+        }
+        .chat-input-area {
+            display: flex;
+            padding: 15px;
+            background-color: #f0f2f5;
+            border-top: 1px solid #e5e7eb;
+            gap: 10px;
+        }
+        .chat-input {
+            flex-grow: 1;
+            padding: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 1em;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .chat-input:focus {
+            border-color: #6366f1;
+        }
+        .send-button {
+            background-image: linear-gradient(to right, #6366f1, #8b5cf6);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: background-color 0.3s ease, transform 0.1s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+            border: none;
+            outline: none;
+        }
+        .send-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .send-button:active {
+            transform: translateY(0);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .username-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+        .modal-input {
+            width: calc(100% - 24px);
+            padding: 12px;
+            margin-bottom: 20px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 1em;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .modal-input:focus {
+            border-color: #6366f1;
+        }
+        /* Hide chat interface initially */
+        .chat-container.hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Username Modal -->
+<div id="usernameModal" class="username-modal">
+    <div class="modal-content">
+        <h2 class="text-2xl font-bold mb-4 text-gray-800">Enter Your Username</h2>
+        <input type="text" id="usernameInput" class="modal-input" placeholder="Your name" autocomplete="off" />
+        <button id="connectButton" class="send-button w-full">Start Chatting</button>
+    </div>
+</div>
+
+<!-- Main Chat Container (hidden initially) -->
+<div id="chatContainer" class="chat-container hidden">
+    <div class="chat-header">Simple WebSocket Chat</div>
+    <div id="messageArea" class="messages">
+        <!-- Messages will be appended here -->
+    </div>
+    <div class="chat-input-area">
+        <input type="text" id="messageInput" class="chat-input" placeholder="Type a message..." autocomplete="off" />
+        <button id="sendButton" class="send-button">Send</button>
+    </div>
+</div>
+
+<!-- SockJS and STOMP.js libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+
+<script>
+    // DOM Elements
+    const usernameModal = document.getElementById('usernameModal');
+    const usernameInput = document.getElementById('usernameInput');
+    const connectButton = document.getElementById('connectButton');
+    const chatContainer = document.getElementById('chatContainer');
+    const messageArea = document.getElementById('messageArea');
+    const messageInput = document.getElementById('messageInput');
+    const sendButton = document.getElementById('sendButton');
+
+    let stompClient = null;
+    let username = null;
+
+    // Function to connect to the WebSocket
+    function connect() {
+        username = usernameInput.value.trim();
+
+        if (username) {
+            // Hide username modal and show chat container
+            usernameModal.classList.add('hidden');
+            chatContainer.classList.remove('hidden');
+
+            // Create a SockJS instance. The '/ws' endpoint is defined in WebSocketConfig.java
+            const socket = new SockJS('http://localhost:8080/ws');
+            // Create a STOMP client over SockJS
+            stompClient = Stomp.over(socket);
+
+            // Connect to the STOMP server
+            stompClient.connect({}, onConnected, onError);
+        } else {
+            alert('Please enter a username!'); // Using alert for simplicity, consider a custom modal in production
+        }
+    }
+
+    // Callback function when STOMP client successfully connects
+    function onConnected() {
+        console.log('Connected to WebSocket!');
+        // Subscribe to the public topic (where all chat messages are broadcast)
+        // The '/topic/public' destination is defined in WebSocketConfig.java
+        stompClient.subscribe('/topic/public', onMessageReceived);
+
+        // Send a JOIN message to the server
+        // The '/app/chat.addUser' destination is handled by ChatController.java
+        stompClient.send("/app/chat.addUser", {},
+            JSON.stringify({sender: username, type: 'JOIN'})
+        );
+        messageInput.focus(); // Focus on message input after joining
+    }
+
+    // Callback function when STOMP client encounters an error
+    function onError(error) {
+        console.error('Could not connect to WebSocket server. Please refresh this page to try again!', error);
+        // Display an error message to the user
+        const errorMessage = document.createElement('div');
+        errorMessage.className = 'message-box system';
+        errorMessage.textContent = 'Error: Could not connect to the chat server. Please ensure the backend is running.';
+        messageArea.appendChild(errorMessage);
+        messageArea.scrollTop = messageArea.scrollHeight;
+    }
+
+    // Function to send a chat message
+    function sendMessage() {
+        const messageContent = messageInput.value.trim();
+
+        if (messageContent && stompClient) {
+            // Create a chat message object
+            const chatMessage = {
+                sender: username,
+                content: messageContent,
+                type: 'CHAT'
+            };
+            // Send the message to the server
+            // The '/app/chat.sendMessage' destination is handled by ChatController.java
+            stompClient.send("/app/chat.sendMessage", {}, JSON.stringify(chatMessage));
+            messageInput.value = ''; // Clear the input field
+        }
+    }
+
+    // Callback function when a message is received from the server
+    function onMessageReceived(payload) {
+        // Parse the JSON payload back into a JavaScript object
+        const message = JSON.parse(payload.body);
+        console.log('Message received:', message);
+
+        const messageElement = document.createElement('div');
+        messageElement.classList.add('message-box');
+
+        const timestamp = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        if (message.type === 'JOIN') {
+            messageElement.classList.add('system');
+            messageElement.innerHTML = `<span class="message-content">${message.sender} has joined!</span><span class="message-timestamp">${timestamp}</span>`;
+        } else if (message.type === 'LEAVE') {
+            messageElement.classList.add('system');
+            messageElement.innerHTML = `<span class="message-content">${message.sender} has left!</span><span class="message-timestamp">${timestamp}</span>`;
+        } else { // CHAT message
+            if (message.sender === username) {
+                messageElement.classList.add('self');
+            } else {
+                messageElement.classList.add('other');
+            }
+            messageElement.innerHTML = `
+                <span class="message-sender">${message.sender}</span>
+                <span class="message-content">${message.content}</span>
+                <span class="message-timestamp">${timestamp}</span>
+            `;
+        }
+        messageArea.appendChild(messageElement);
+        // Scroll to the bottom of the message area to show the latest message
+        messageArea.scrollTop = messageArea.scrollHeight;
+    }
+
+    // Event Listeners
+    connectButton.addEventListener('click', connect);
+    sendButton.addEventListener('click', sendMessage);
+
+    // Allow sending message by pressing Enter key in the input field
+    messageInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            sendMessage();
+        }
+    });
+
+    // Allow connecting by pressing Enter key in the username input field
+    usernameInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            connect();
+        }
+    });
+
+    // Focus on the username input when the page loads
+    document.addEventListener('DOMContentLoaded', () => {
+        usernameInput.focus();
+    });
+
+</script>
+</body>
+</html>
